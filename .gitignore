@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.pyc
+
+# Virtual env
+.venv/
+
+# IDE
+.idea/
+.vscode/
+
+# cache / embeddings
+emb_cache/
+*.faiss
+
+# outputs
+outputs/
+
+# uploads
+uploads/
+
+# OS
+.DS_Store
