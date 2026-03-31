@@ -932,7 +932,7 @@ def main():
         chunk_min_chars=args.chunk_min_chars,
         chunk_max_chars=args.chunk_max_chars,
         chunk_overlap_chars=args.chunk_overlap_chars,
-        ablation_mode=args.ablation
+        ablation_mode=args.ablationgit statusgit status
     )
 
     print("\n==== RESULT (selected top-k) ====")
@@ -949,5 +949,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-KKKKKK
