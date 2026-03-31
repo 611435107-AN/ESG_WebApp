@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>分析結果</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 2em; background-color: #f4f4f9; color: #333; }
+        .container { max-width: 800px; margin: auto; }
+        .card { padding: 1.5em; border: 1px solid #ddd; border-radius: 8px; margin-bottom: 1.5em; background-color: #fff; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
+        h1, h3 { color: #0056b3; }
+        h1 { text-align: center; }
+        pre { white-space: pre-wrap; word-wrap: break-word; background-color: #f8f9fa; padding: 1em; border-radius: 5px; border: 1px solid #eee; }
+        ul { list-style-type: none; padding-left: 0; }
+        li { background-color: #fafafa; padding: 0.8em; border-left: 4px solid #007bff; margin-bottom: 0.5em; }
+        a { display: inline-block; margin-top: 2em; text-decoration: none; background-color: #28a745; color: white; padding: 10px 20px; border-radius: 5px; }
+        a:hover { background-color: #218838; }
+        hr.divider { border: 0; border-top: 1px solid #eee; margin: 10px 0; }
+        /* 匹配類型標籤樣式 */
+        .match-tag {
+            display: inline-block;
+            background-color: #e0e0e0;
+            color: #555;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 0.8em;
+            margin-left: 8px;
+        }
+        .match-tag.precise-input { background-color: #c8e6c9; color: #1b5e20; font-weight: bold; } /* 精確GRI(輸入) */
+        .match-tag.precise-topic { background-color: #d1c4e9; color: #4527a0; } /* 主題GRI */
+        .match-tag.alias { background-color: #fff9c4; color: #f57f17; }       /* 同義詞 */
+        .match-tag.content { background-color: #e3f2fd; color: #0d47a1; }    /* 內容摘要 */
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>分析結果</h1>
+
+        <div class="card">
+            <h3>查詢資訊</h3>
+            <p>
+                <strong>檔案：</strong> {{ filename }} <br>
+                <strong>公司：</strong> {{ results.company }} <br>
+                <strong>年份：</strong> {{ results.year }} <br>
+                <strong>原始查詢：</strong> {{ results.query }}
+
+                <hr class="divider">
+
+                {# 顯示後端判斷的 "是/否" #}
+                <strong>是否包含對應主題/GRI編號：</strong> {{ results.covers_mapped_codes }}
+            </p>
+        </div>
+
+        <div class="card">
+            <h3>結論摘要 (專家口吻)</h3>
+            <pre>{{ results.expert_conclusion }}</pre>
+        </div>
+
+        <div class="card">
+            <h3>重點條列</h3>
+            <pre>{{ results.expert_bullets }}</pre>
+        </div>
+
+        <div class="card">
+            <h3>選取段落 (依相關性排序)</h3>
+            <ul>
+                {% for item in results.selected %}
+                    <li>
+                        <strong>{{ item.doc }} (p.{{ item.page }})</strong>: {{ item.preview }}
+                        {# 根據後端傳來的 match_type 顯示不同樣式的標籤 #}
+                        {% if item.match_type == "精確 GRI 匹配 (輸入)" %}
+                            <span class="match-tag precise-input">{{ item.match_type }}</span>
+                        {% elif item.match_type == "主題 GRI 匹配" %}
+                            <span class="match-tag precise-topic">{{ item.match_type }}</span>
+                        {% elif item.match_type == "同義詞相關" %}
+                            <span class="match-tag alias">{{ item.match_type }}</span>
+                        {% elif item.match_type == "內容摘要相關" %}
+                            <span class="match-tag content">{{ item.match_type }}</span>
+                        {% else %}
+                            <span class="match-tag">{{ item.match_type }}</span> {# 預設樣式 #}
+                        {% endif %}
+                    </li>
+                {% else %}
+                    <li>沒有找到相關段落。</li>
+                {% endfor %}
+            </ul>
+        </div>
+
+        <a href="/">返回上傳頁面，進行新的分析</a>
+    </div>
+</body>
+</html>

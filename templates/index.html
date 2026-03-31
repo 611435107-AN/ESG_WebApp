@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ESG 永續報告書分析工具</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 2em; background-color: #f4f4f9; color: #333; }
+        .container { max-width: 600px; margin: auto; padding: 2em; border: 1px solid #ddd; border-radius: 10px; background-color: #fff; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        h2 { text-align: center; color: #0056b3; }
+        label { display: block; margin-top: 1.5em; margin-bottom: 0.5em; font-weight: bold; }
+        input[type="file"], input[type="text"], select, button { width: 100%; padding: 12px; margin-top: 5px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 5px; }
+        button { background-color: #007bff; color: white; font-size: 1.1em; border: none; cursor: pointer; margin-top: 1.5em; }
+        button:hover { background-color: #0056b3; }
+        .flash { padding: 1em; margin-bottom: 1em; background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; border-radius: 5px; }
+        .hint { margin-top: 0.5em; color: #666; font-size: 0.95em; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>上傳永續報告書進行分析</h2>
+
+        {% with messages = get_flashed_messages() %}
+            {% if messages %}
+                <div class="flash">{{ messages[0] }}</div>
+            {% endif %}
+        {% endwith %}
+
+        <form method="post" enctype="multipart/form-data">
+            <label for="file">1. 選擇要上傳的 PDF 報告書：</label>
+            <input type="file" name="file" required>
+
+            <label for="company">2. 公司名稱：</label>
+            <input type="text" name="company" value="台積電">
+
+            <label for="year">3. 報告書年份：</label>
+            <input type="text" name="year" value="2024">
+
+            <label for="topic">4. 查詢主題：</label>
+            <select name="topic" id="topic">
+                {% for t in topic_options %}
+                    <option value="{{ t }}" {% if t == selected_topic %}selected{% endif %}>{{ t }}</option>
+                {% endfor %}
+            </select>
+
+            <button type="submit">開始分析</button>
+        </form>
+    </div>
+</body>
+</html>
