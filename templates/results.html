@@ -5,88 +5,221 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>分析結果</title>
     <style>
-        body { font-family: Arial, sans-serif; margin: 2em; background-color: #f4f4f9; color: #333; }
-        .container { max-width: 800px; margin: auto; }
-        .card { padding: 1.5em; border: 1px solid #ddd; border-radius: 8px; margin-bottom: 1.5em; background-color: #fff; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
-        h1, h3 { color: #0056b3; }
-        h1 { text-align: center; }
-        pre { white-space: pre-wrap; word-wrap: break-word; background-color: #f8f9fa; padding: 1em; border-radius: 5px; border: 1px solid #eee; }
-        ul { list-style-type: none; padding-left: 0; }
-        li { background-color: #fafafa; padding: 0.8em; border-left: 4px solid #007bff; margin-bottom: 0.5em; }
-        a { display: inline-block; margin-top: 2em; text-decoration: none; background-color: #28a745; color: white; padding: 10px 20px; border-radius: 5px; }
-        a:hover { background-color: #218838; }
-        hr.divider { border: 0; border-top: 1px solid #eee; margin: 10px 0; }
-        /* 匹配類型標籤樣式 */
+        /* === 基礎設定 === */
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            margin: 2em;
+            background-color: #f8f9fa; /* 更柔和的背景灰 */
+            color: #333;
+            line-height: 1.6;
+        }
+        .container { max-width: 1200px; margin: auto; }
+
+        /* === 卡片基礎樣式 === */
+        .card {
+            padding: 1.5em;
+            border: none; /* 移除生硬的邊框 */
+            border-radius: 12px; /* 更圓潤的導角 */
+            margin-bottom: 1.5em;
+            background-color: #fff;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.04), 0 1px 3px rgba(0,0,0,0.02); /* 增加柔和的層次陰影 */
+        }
+        h1 { text-align: center; color: #2c3e50; font-weight: 700; margin-bottom: 1.5em;}
+        h3 { color: #2c3e50; font-weight: 600; margin-top: 0; margin-bottom: 1rem; padding-bottom: 0.5rem; border-bottom: 2px solid #f1f3f5; }
+
+        pre {
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            background-color: #f8f9fa;
+            padding: 1.2em;
+            border-radius: 8px;
+            border: 1px solid #e9ecef;
+            font-family: inherit; /* 讓 pre 繼承系統字體，不要用打字機字體 */
+            font-size: 0.95rem;
+        }
+
+        a.btn-back { display: inline-block; text-decoration: none; background-color: #0d6efd; color: white; padding: 12px 24px; border-radius: 8px; font-weight: 500; transition: background-color 0.2s;}
+        a.btn-back:hover { background-color: #0b5ed7; }
+        hr.divider { border: 0; border-top: 1px solid #e9ecef; margin: 15px 0; }
+
+        /* === 左右雙欄排版 (Flexbox) === */
+        .two-column-layout {
+            display: flex;
+            gap: 24px;
+            align-items: flex-start;
+        }
+        .main-content { flex: 2; min-width: 0; /* 防止 flex item 撐破容器 */ }
+        .sidebar { flex: 1; position: sticky; top: 24px; min-width: 0; }
+
+        @media (max-width: 992px) {
+            .two-column-layout { flex-direction: column; }
+            .sidebar { position: static; }
+        }
+
+        /* === 證據段落清單 (左側) 樣式優化 === */
+        ul.evidence-list { list-style-type: none; padding-left: 0; margin: 0; }
+        .evidence-item {
+            background-color: #ffffff;
+            padding: 1.2em;
+            border: 1px solid #e9ecef;
+            border-left: 5px solid #0d6efd; /* 保留左側重點線，但顏色改為沉穩藍 */
+            border-radius: 8px;
+            margin-bottom: 1.2em;
+            position: relative;
+        }
+        .evidence-item:last-child { margin-bottom: 0; }
+        .evidence-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 0.5em;
+        }
+        .evidence-title {
+            font-weight: 600;
+            color: #212529;
+            font-size: 1.05rem;
+        }
+        .evidence-text {
+            color: #495057;
+            font-size: 0.95rem;
+            margin-bottom: 0.8em;
+        }
+
+        /* === 匹配類型標籤 (Stage 1~4) === */
         .match-tag {
             display: inline-block;
-            background-color: #e0e0e0;
-            color: #555;
-            padding: 2px 6px;
-            border-radius: 4px;
-            font-size: 0.8em;
-            margin-left: 8px;
+            padding: 4px 10px;
+            border-radius: 20px; /* 膠囊形狀 */
+            font-size: 0.75rem;
+            font-weight: 600;
+            letter-spacing: 0.5px;
         }
-        .match-tag.precise-input { background-color: #c8e6c9; color: #1b5e20; font-weight: bold; } /* 精確GRI(輸入) */
-        .match-tag.precise-topic { background-color: #d1c4e9; color: #4527a0; } /* 主題GRI */
-        .match-tag.alias { background-color: #fff9c4; color: #f57f17; }       /* 同義詞 */
-        .match-tag.content { background-color: #e3f2fd; color: #0d47a1; }    /* 內容摘要 */
+        .match-tag.stage-1 { background-color: #d1e7dd; color: #0f5132; } /* 綠色 */
+        .match-tag.stage-2 { background-color: #fff3cd; color: #854000; } /* 橘黃 */
+        .match-tag.stage-3 { background-color: #cff4fc; color: #055160; } /* 藍色 */
+        .match-tag.stage-4 { background-color: #e0cffc; color: #3b0560; } /* 紫色 */
+
+        /* === 關鍵字目錄 (右側) 樣式優化 === */
+        .keyword-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px; /* 縮小間距讓畫面更緊湊 */
+        }
+        .keyword-badge {
+            background-color: #f1f3f5;
+            padding: 5px 12px;
+            border-radius: 20px; /* 膠囊形狀 */
+            font-size: 0.85rem;
+            color: #212529;
+            display: inline-flex;
+            align-items: center;
+            border: 1px solid transparent;
+            transition: all 0.2s ease;
+        }
+        .keyword-badge:hover {
+            background-color: #e9ecef;
+            border-color: #ced4da;
+        }
+        .keyword-name {
+            font-weight: 600;
+            margin-right: 6px;
+        }
+        .keyword-pages {
+            color: #868e96; /* 更淡的灰色 */
+            font-size: 0.8rem;
+        }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>分析結果</h1>
+        <h1>📊 ESG 分析結果</h1>
 
         <div class="card">
-            <h3>查詢資訊</h3>
-            <p>
-                <strong>檔案：</strong> {{ filename }} <br>
-                <strong>公司：</strong> {{ results.company }} <br>
-                <strong>年份：</strong> {{ results.year }} <br>
-                <strong>原始查詢：</strong> {{ results.query }}
-
-                <hr class="divider">
-
-                {# 顯示後端判斷的 "是/否" #}
-                <strong>是否包含對應主題/GRI編號：</strong> {{ results.covers_mapped_codes }}
-            </p>
-        </div>
-
-        <div class="card">
-            <h3>結論摘要 (專家口吻)</h3>
-            <pre>{{ results.expert_conclusion }}</pre>
-        </div>
-
-        <div class="card">
-            <h3>重點條列</h3>
-            <pre>{{ results.expert_bullets }}</pre>
-        </div>
-
-        <div class="card">
-            <h3>選取段落 (依相關性排序)</h3>
-            <ul>
-                {% for item in results.selected %}
-                    <li>
-                        <strong>{{ item.doc }} (p.{{ item.page }})</strong>: {{ item.preview }}
-                        {# 根據後端傳來的 match_type 顯示不同樣式的標籤 #}
-                        {% if item.match_type == "精確 GRI 匹配 (輸入)" %}
-                            <span class="match-tag precise-input">{{ item.match_type }}</span>
-                        {% elif item.match_type == "主題 GRI 匹配" %}
-                            <span class="match-tag precise-topic">{{ item.match_type }}</span>
-                        {% elif item.match_type == "同義詞相關" %}
-                            <span class="match-tag alias">{{ item.match_type }}</span>
-                        {% elif item.match_type == "內容摘要相關" %}
-                            <span class="match-tag content">{{ item.match_type }}</span>
-                        {% else %}
-                            <span class="match-tag">{{ item.match_type }}</span> {# 預設樣式 #}
-                        {% endif %}
-                    </li>
+            <h3>📝 查詢資訊</h3>
+            <div style="display: flex; flex-wrap: wrap; gap: 20px; font-size: 0.95rem;">
+                <div><strong>📁 檔案：</strong> {{ filename }}</div>
+                <div><strong>🏢 公司：</strong> {{ results.company }}</div>
+                <div><strong>📅 年份：</strong> {{ results.year }}</div>
+                <div><strong>🎯 原始查詢：</strong> <span style="background-color: #e9ecef; padding: 2px 8px; border-radius: 4px; font-weight: 600;">{{ results.query }}</span></div>
+            </div>
+            <hr class="divider">
+            <div style="font-size: 0.95rem;">
+                <strong>✅ 涵蓋對應主題/GRI編號：</strong>
+                {% if results.covers_mapped_codes == "是" %}
+                    <span style="color: #198754; font-weight: bold;">是</span>
                 {% else %}
-                    <li>沒有找到相關段落。</li>
-                {% endfor %}
-            </ul>
+                    <span style="color: #dc3545; font-weight: bold;">否</span>
+                {% endif %}
+            </div>
         </div>
 
-        <a href="/">返回上傳頁面，進行新的分析</a>
+        <div class="card">
+            <h3>💡 專家結論摘要</h3>
+            <pre style="margin: 0;">{{ results.expert_conclusion }}</pre>
+        </div>
+
+        <div class="card">
+            <h3>📌 重點條列</h3>
+            <pre style="margin: 0;">{{ results.expert_bullets }}</pre>
+        </div>
+
+        <div class="two-column-layout">
+
+            <div class="main-content">
+                <div class="card" style="margin-bottom: 0;">
+                    <h3>📑 選取段落 (證據清單)</h3>
+                    <ul class="evidence-list">
+                        {% for item in results.selected %}
+                            <li class="evidence-item">
+                                <div class="evidence-header">
+                                    <span class="evidence-title">{{ item.doc }} <span style="color:#6c757d; font-weight:normal;">(p.{{ item.page }})</span></span>
+                                </div>
+                                <div class="evidence-text">
+                                    {{ item.preview }}
+                                </div>
+                                <div>
+                                    {% if "Stage 1" in item.match_type %}
+                                        <span class="match-tag stage-1">{{ item.match_type }}</span>
+                                    {% elif "Stage 2" in item.match_type %}
+                                        <span class="match-tag stage-2">{{ item.match_type }}</span>
+                                    {% elif "Stage 3" in item.match_type %}
+                                        <span class="match-tag stage-3">{{ item.match_type }}</span>
+                                    {% elif "Stage 4" in item.match_type %}
+                                        <span class="match-tag stage-4">{{ item.match_type }}</span>
+                                    {% else %}
+                                        <span class="match-tag" style="background-color:#e9ecef; color:#495057;">{{ item.match_type }}</span>
+                                    {% endif %}
+                                </div>
+                            </li>
+                        {% else %}
+                            <li class="evidence-item" style="border-left-color: #ced4da;">沒有找到相關段落。</li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            </div>
+
+            <div class="sidebar">
+                <div class="card" style="margin-bottom: 0;">
+                    <h3>🔍 關鍵字目錄</h3>
+                    <div class="keyword-container">
+                        {% if results.keyword_directory %}
+                            {% for item in results.keyword_directory %}
+                                <div class="keyword-badge">
+                                    <span class="keyword-name">{{ item.keyword }}</span>
+                                    <span class="keyword-pages">(p. {{ item.pages | join(', ') }})</span>
+                                </div>
+                            {% endfor %}
+                        {% else %}
+                            <p style="color: #6c757d; margin: 0; font-size: 0.9rem;">擷取的段落中未檢測到預設關鍵字。</p>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+        </div>
+        <div style="text-align: center; margin-top: 3em; margin-bottom: 2em;">
+            <a href="/" class="btn-back">← 返回上傳頁面，進行新分析</a>
+        </div>
     </div>
 </body>
 </html>

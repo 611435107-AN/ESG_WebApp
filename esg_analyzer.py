@@ -3,7 +3,8 @@ r"""
 ESG / GRI 分析邏輯模組 (V11.0 - Hybrid Search 混合檢索架構)
 - 結合 BM25 (Sparse) 與 Embedding (Dense) 雙路徑檢索
 - 實作 Reciprocal Rank Fusion (RRF) 分數融合
-- 四層架構：意圖重構 -> 規則/BM25檢索 -> 向量語意檢索 -> RRF融合與重排
+- 四階段平行管線：意圖重構 -> 規則/BM25檢索 -> 向量語意檢索 -> RRF融合與重排
+- 新增：關鍵字反查與目錄生成 (Keyword Directory)
 - 匯出 chunks 成 JSONL + CSV（供後續 LLM 標註用）
 
 依賴套件：
@@ -27,16 +28,6 @@ from typing import List, Dict, Tuple, Optional, Any
 import fitz  # PyMuPDF
 from PIL import Image
 import numpy as np
-
-try:
-    import jieba
-except Exception:
-    jieba = None
-
-try:
-    import pytesseract
-except Exception:
-    pytesseract = None
 
 # 引入 Embedding 與相似度計算套件
 from sentence_transformers import SentenceTransformer
@@ -62,7 +53,6 @@ GLOBAL_EMBEDDING_MODEL = None
 def get_embedding_model():
     global GLOBAL_EMBEDDING_MODEL
     if GLOBAL_EMBEDDING_MODEL is None:
-        # 這裡直接拿掉對 SentenceTransformer 是否為 None 的判斷
         print(">> 正在載入 Embedding 模型 (BAAI/bge-m3)，初次下載可能需要一些時間...")
         # 建議加入 device 參數，確保優先使用 GPU (如有)
         GLOBAL_EMBEDDING_MODEL = SentenceTransformer('BAAI/bge-m3')
@@ -151,6 +141,7 @@ TOPIC2GRI = {
     },
 }
 
+TOPIC_OPTIONS = list(TOPIC2GRI.keys())
 
 # -----------------------------
 # 資料結構
@@ -704,7 +695,7 @@ def make_expert_summary(company: str, year: str, query: str, strict_codes: List[
 
 
 # -----------------------------
-# 主流程：混合式分層檢索 (Hybrid Search)
+# 主流程：混合式四階段管線檢索 (Hybrid Search Pipeline)
 # -----------------------------
 def run_pipeline(
         pdf_paths: List[str],
@@ -736,7 +727,8 @@ def run_pipeline(
             "decision": "錯誤：無法處理任何 PDF 檔案",
             "selected": [],
             "expert_conclusion": "無法處理輸入的 PDF 檔案。",
-            "expert_bullets": ""
+            "expert_bullets": "",
+            "keyword_directory": []
         }
 
     # 2) 連貫切 chunk
@@ -753,7 +745,8 @@ def run_pipeline(
             "decision": "錯誤：無法從 PDF 中切分段落",
             "selected": [],
             "expert_conclusion": "無法從 PDF 文件中有效切分段落。",
-            "expert_bullets": ""
+            "expert_bullets": "",
+            "keyword_directory": []
         }
 
     # 3) 匯出 chunks
@@ -764,11 +757,14 @@ def run_pipeline(
         print(f"[EXPORT] chunks jsonl -> {jsonl_path}")
         print(f"[EXPORT] chunks csv   -> {csv_path}")
 
-    # 第一層：意圖重構 (Intent Definition)
+    # ==========================================
+    # 第一層 (Stage 1)：意圖重構 (Intent Definition)
+    # ==========================================
     intents = expand_topic_or_gri(query)
     primary = intents["primary"]
     related = intents["related"]
     aliases_strong = intents.get("aliases_strong", [])
+    aliases_weak = intents.get("aliases_weak", [])  # 加入弱關聯詞以供後續反查標註
 
     # 載入 BM25 與 Embedding 模型
     bm25 = BM25([c.text for c in chunks])
@@ -789,21 +785,20 @@ def run_pipeline(
     query_is_gri = any(is_gri_code(t) for t in query_tokens)
 
     # ==========================================
-    # ==========================================
-    # 核心：四層 Hybrid 檢索邏輯 (支援消融實驗開關)
+    # 核心：四階段 Hybrid 檢索邏輯 (支援消融實驗開關)
     # ==========================================
     fusion_pool_size = max(topk * 10, 150)
     bm25_hits = []
     dense_hits = []
 
-    # 【Stage 1 (規則優先)】：GRI 精確碼匹配
+    # 【Stage 1 (規則優先)】：GRI 實體精確匹配
     # 消融設定：只有 full 模式才開啟強制規則
     if ablation_mode == "full":
         if query_is_gri or primary:
             direct_codes = primary if query_is_gri else primary
             for i, ch in enumerate(chunks):
                 if any(contains_code(ch.text, c) for c in direct_codes):
-                    ranked_results.append((i, 9999.0, "Stage 1: Entity Match"))
+                    ranked_results.append((i, 9999.0, "Stage 1: Entity Match (實體匹配)"))
                     processed_indices.add(i)
 
     # 【Stage 2 (Sparse)】：BM25 關鍵字檢索
@@ -812,7 +807,7 @@ def run_pipeline(
         bm25_query = " ".join(list(dict.fromkeys([query] + aliases_strong)))
         bm25_hits = bm25.search(bm25_query, topk=fusion_pool_size)
 
-    # 【Stage 3 (Dense)】：Embedding 語意檢索
+    # 【Stage 3 (Dense)】：Embedding 語意概念檢索
     # 消融設定：sparse_only 模式關閉此層
     if ablation_mode in ["full", "dense_only", "hybrid_no_rule"]:
         print(f">> 正在執行 Dense 檢索 (Mode: {ablation_mode})...")
@@ -822,8 +817,7 @@ def run_pipeline(
         dense_hits.sort(key=lambda x: x[1], reverse=True)
         dense_hits = dense_hits[:fusion_pool_size]
 
-    # 【Stage 4 (Fusion)】：RRF 分數融合與重排
-    # reciprocal_rank_fusion 函式若遇到空陣列也能正常運作
+    # 【Stage 4 (Fusion)】：RRF 分數融合與混合共識重排
     fused_results = reciprocal_rank_fusion(bm25_hits, dense_hits)
 
     # 併入總榜單，並標記來源引擎
@@ -839,11 +833,11 @@ def run_pipeline(
                 match_label = "Stage 3: Dense Match (Ablation)"
             else:
                 if in_dense_top and not in_bm25_top:
-                    match_label = "Stage 3: Dense Match"
+                    match_label = "Stage 3: Dense Match (語意概念檢索)"
                 elif in_bm25_top and not in_dense_top:
-                    match_label = "Stage 2: Sparse Match"
+                    match_label = "Stage 2: Sparse Match (關鍵字檢索)"
                 else:
-                    match_label = "Stage 4: Hybrid Consensus"
+                    match_label = "Stage 4: Hybrid Consensus (混合共識)"
 
             ranked_results.append((idx, float(rrf_score), match_label))
             processed_indices.add(idx)
@@ -851,7 +845,7 @@ def run_pipeline(
     # 依最終分數降序排列
     ranked_results.sort(key=lambda x: (-x[1], x[0]))
 
-    # --- Top-k 篩選與每頁上限控制 ---
+    # --- Top-k 篩選與每頁上限控制 (Diversity Control) ---
     selected: List[Chunk] = []
     per_page_count: Dict[int, int] = {}
     seen = set()
@@ -879,6 +873,31 @@ def run_pipeline(
     expert_conclusion, expert_bullets = make_expert_summary(company, year, query, strict_codes, selected)
     covers_mapped_codes = "是" if bool(strict_codes) else "否"
 
+    # ==========================================
+    # [新增] 生成關鍵字目錄 (Keyword Directory)
+    # 對檢索出的 Top-K 證據段落進行關鍵字反查
+    # ==========================================
+    keywords_to_track = set(primary + aliases_strong + aliases_weak + [query])
+    keyword_directory_map = {}
+
+    for ch in selected:
+        text_lower = ch.text.lower()
+        for kw in keywords_to_track:
+            # 轉小寫比對確保不漏抓英文縮寫
+            if kw.lower() in text_lower:
+                if kw not in keyword_directory_map:
+                    keyword_directory_map[kw] = set()
+                keyword_directory_map[kw].add(ch.page)
+
+    # 整理成列表，依據「出現頁數多寡」由大到小排序，若同分則依字典序排列
+    keyword_dir_formatted = []
+    for kw, pages in sorted(keyword_directory_map.items(), key=lambda x: (-len(x[1]), x[0])):
+        keyword_dir_formatted.append({
+            "keyword": kw,
+            "pages": sorted(list(pages))
+        })
+    # ==========================================
+
     return {
         "query": query,
         "company": company,
@@ -895,7 +914,8 @@ def run_pipeline(
         ],
         "expert_conclusion": expert_conclusion,
         "expert_bullets": expert_bullets,
-        "covers_mapped_codes": covers_mapped_codes
+        "covers_mapped_codes": covers_mapped_codes,
+        "keyword_directory": keyword_dir_formatted  # 將關鍵字目錄加入回傳結果
     }
 
 
@@ -932,7 +952,7 @@ def main():
         chunk_min_chars=args.chunk_min_chars,
         chunk_max_chars=args.chunk_max_chars,
         chunk_overlap_chars=args.chunk_overlap_chars,
-        ablation_mode=args.ablationgit statusgit status
+        ablation_mode=args.ablation
     )
 
     print("\n==== RESULT (selected top-k) ====")
@@ -945,6 +965,15 @@ def main():
     print(res["expert_bullets"])
     print("\n==== covers_mapped_codes ====")
     print(res["covers_mapped_codes"])
+
+    # [新增] 終端機印出關鍵字目錄
+    print("\n==== KEYWORD DIRECTORY ====")
+    if res.get("keyword_directory"):
+        for item in res["keyword_directory"]:
+            pages_str = ", ".join(map(str, item["pages"]))
+            print(f"- {item['keyword']} (見於 p.{pages_str})")
+    else:
+        print("(無命中任何預設關鍵字)")
 
 
 if __name__ == "__main__":
