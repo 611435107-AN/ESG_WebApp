@@ -4,6 +4,7 @@ ESG / GRI 分析邏輯模組 (V12.0 - 支援 Ablation 消融實驗的 Hybrid 架
 - 結合 BM25 (Sparse) 與 Embedding (Dense) 雙路徑檢索
 - 實作 Reciprocal Rank Fusion (RRF) 分數融合
 - 支援消融實驗模式切換：full, sparse_only, dense_only, hybrid_no_rule, all (自動跑四次)
+- 【更新】使用 MinerU 的 JSON 輸出替代原本的 PDF OCR 解析
 """
 
 from __future__ import annotations
@@ -17,9 +18,6 @@ import datetime
 
 from dataclasses import dataclass, field
 from typing import List, Dict, Tuple, Optional, Any
-
-import fitz  # PyMuPDF
-from PIL import Image
 import numpy as np
 
 # 引入 Embedding 與相似度計算套件
@@ -30,11 +28,6 @@ try:
     import jieba
 except ImportError:
     jieba = None
-
-try:
-    import pytesseract
-except ImportError:
-    pytesseract = None
 
 # -----------------------------
 # 系統全域變數 (Embedding 模型快取)
@@ -120,7 +113,7 @@ class Chunk:
 
 
 # -----------------------------
-# 工具：安全檔名 / 匯出 JSONL+CSV (Excel 可直讀)
+# 工具：安全檔名 / 匯出 JSONL+CSV
 # -----------------------------
 def _safe_filename(s: str) -> str:
     s = (s or "").strip()
@@ -137,7 +130,6 @@ def export_chunks_jsonl_csv(chunks: List[Chunk], company: str, year: str, query:
     fn_year = _safe_filename(year)
     fn_query = _safe_filename(query)
 
-    # 檔名中加入 mode 方便辨識
     base = f"{fn_company}_{fn_year}_{fn_query}_mode-{ablation_mode}_{stamp}"
     jsonl_path = os.path.join(out_dir, base + ".jsonl")
     csv_path = os.path.join(out_dir, base + ".csv")
@@ -150,9 +142,7 @@ def export_chunks_jsonl_csv(chunks: List[Chunk], company: str, year: str, query:
             }
             f.write(json.dumps(rec, ensure_ascii=False) + "\n")
 
-    # utf-8-sig 確保可以直接用 Excel 開啟不會亂碼
     with open(csv_path, "w", encoding="utf-8-sig", newline="") as f:
-        # 完全依照您指定的欄位輸出 (移除了 chunk_id，不包含子面向)
         writer = csv.DictWriter(f, fieldnames=[
             "company", "year", "topic_query", "ablation_mode",
             "doc_id", "page", "source", "char_len", "match_type", "preview"
@@ -169,50 +159,47 @@ def export_chunks_jsonl_csv(chunks: List[Chunk], company: str, year: str, query:
                 "source": ch.source,
                 "char_len": len(ch.text),
                 "match_type": ch.match_type,
-                "preview": ch.preview(2000) # 將 preview 長度拉長，確保文本完整
+                "preview": ch.preview(2000)
             })
 
     return jsonl_path, csv_path
 
 
 # -----------------------------
-# 抽取 & OCR
+# 從 MinerU JSON 解析內容
 # -----------------------------
-def page_text_density(text: str) -> float:
-    return sum(1 for c in text if not c.isspace())
+def extract_from_mineru_json(json_path: str) -> List[Chunk]:
+    with open(json_path, 'r', encoding='utf-8') as f:
+        data = json.load(f)
 
-
-def ocr_page_image(page: fitz.Page, dpi: int = 300, lang: str = "chi_tra") -> str:
-    if pytesseract is None: return ""
-    mat = fitz.Matrix(dpi / 72.0, dpi / 72.0)
-    pix = page.get_pixmap(matrix=mat, alpha=False)
-    img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
-    try:
-        txt = pytesseract.image_to_string(img, lang=lang)
-    except Exception:
-        txt = ""
-    return txt
-
-
-def triage_extract(pdf_path: str, density_threshold: int = 200) -> List[Chunk]:
-    doc = fitz.open(pdf_path)
-    doc_id = os.path.basename(pdf_path)
+    doc_id = os.path.basename(json_path)
     pages: List[Chunk] = []
-    for pno in range(doc.page_count):
-        page = doc.load_page(pno)
-        raw = page.get_text("text") or ""
-        dens = page_text_density(raw)
-        if dens < density_threshold:
-            ocr_txt = ocr_page_image(page)
-            text = (raw + "\n" + ocr_txt).strip()
-            source = "ocr" if ocr_txt else "pdftext"
-        else:
-            text = raw
-            source = "pdftext"
-        if text.strip():
-            text = f"[[p.{pno + 1}]]\n" + text
-            pages.append(Chunk(doc_id=doc_id, page=pno + 1, text=text, source=source))
-    doc.close()
+
+    if 'pdf_info' in data:
+        for page in data['pdf_info']:
+            page_num = page.get('page_idx', 0) + 1
+            page_text_blocks = []
+
+            for block in page.get('para_blocks', []):
+                block_text = ""
+                for line in block.get('lines', []):
+                    for span in line.get('spans', []):
+                        span_type = span.get('type')
+                        # 一般文字或公式
+                        if span_type in ['text', 'inline_equation', 'title']:
+                            block_text += span.get('content', '')
+                        # 表格則擷取 HTML
+                        elif span_type == 'table':
+                            block_text += "\n" + span.get('html', '') + "\n"
+                    block_text += "\n"  # 換行
+                page_text_blocks.append(block_text.strip())
+
+            # 將同一頁的區塊以換行連接
+            text = "\n\n".join([b for b in page_text_blocks if b])
+            if text.strip():
+                # 加上頁碼標記供切片器識別
+                text = f"[[p.{page_num}]]\n" + text
+                pages.append(Chunk(doc_id=doc_id, page=page_num, text=text, source="mineru_json"))
     return pages
 
 
@@ -229,6 +216,9 @@ def is_heading(line: str) -> bool:
 def adaptive_chunk_v2(pages: List[Chunk], min_chars: int = 350, max_chars: int = 1200, overlap_chars: int = 180,
                       allow_over_max_ratio: float = 1.3) -> List[Chunk]:
     def is_table_like(line: str) -> bool:
+        # 支援 MinerU 的 HTML 表格標籤判斷
+        line_lower = line.lower()
+        if "<td" in line_lower or "<tr" in line_lower or "<table" in line_lower: return True
         if re.search(r"\d+\s+\d+\s+\d+", line): return True
         if line.count("  ") >= 3: return True
         if "|" in line or "——" in line or "----" in line: return True
@@ -464,48 +454,31 @@ List[Tuple[int, float]]:
 
 
 # -----------------------------
-# 專家摘要 (維持不變)
-# -----------------------------
-EXPERT_METHOD_HINTS = ["政策", "標準", "程序", "制度", "治理", "KPI", "目標", "監控", "通報", "稽核", "教育訓練",
-                       "多層次防護", "帳號管理", "加密", "備援", "災難復原", "自動化", "FTP", "SOC", "DLP", "ISMS",
-                       "NICS"]
-EXPERT_RISK_HINTS = ["事件", "外洩", "缺失", "違規", "罰款", "風險", "弱點", "異常", "未達", "未見"]
-
-
-def _collect_metrics_and_signals(chunks: List[Chunk]):
-    pass
-    return {"numbers": [], "methods": [], "risks": [], "thirdparty": False}
-
-
-def make_expert_summary(company: str, year: str, query: str, strict_codes: List[str], chunks: List[Chunk]):
-    return "自動摘要已略過", "無"
-
-
-# -----------------------------
 # 主流程：混合式分層檢索 (支援 Ablation)
 # -----------------------------
 def run_pipeline(
-        pdf_paths: List[str], company: str, year: str, query: str,
+        json_paths: List[str], company: str, year: str, query: str,
         topk: int = 12, export_all_chunks: bool = True, export_dir: str = "outputs",
-        per_page_max: int = 2, density_threshold: int = 200, chunk_min_chars: int = 350,
+        per_page_max: int = 2, chunk_min_chars: int = 350,
         chunk_max_chars: int = 1200, chunk_overlap_chars: int = 180,
         ablation_mode: str = "full"
 ) -> Dict:
     print(f"\n[INFO] 開始處理: {company} {year} | 查詢: {query} | 模式: {ablation_mode}")
 
     all_pages: List[Chunk] = []
-    for p in pdf_paths:
+    # 這裡改從 JSON 讀取
+    for p in json_paths:
         try:
-            all_pages.extend(triage_extract(p, density_threshold=density_threshold))
+            all_pages.extend(extract_from_mineru_json(p))
         except Exception as e:
             print(f"Error processing {p}: {e}")
             continue
 
-    if not all_pages: return {"decision": "錯誤：無法處理任何 PDF 檔案", "selected": []}
+    if not all_pages: return {"decision": "錯誤：無法處理任何 JSON 檔案", "selected": []}
 
     chunks = adaptive_chunk_v2(all_pages, min_chars=chunk_min_chars, max_chars=chunk_max_chars,
                                overlap_chars=chunk_overlap_chars)
-    if not chunks: return {"decision": "錯誤：無法從 PDF 中切分段落", "selected": []}
+    if not chunks: return {"decision": "錯誤：無法從 JSON 中切分段落", "selected": []}
 
     intents = expand_topic_or_gri(query)
     primary, aliases_strong = intents["primary"], intents.get("aliases_strong", [])
@@ -604,7 +577,8 @@ def run_pipeline(
 # -----------------------------
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--pdf", nargs="+", required=True, help="PDF 路徑")
+    # 【更新】改為傳入 JSON 路徑
+    parser.add_argument("--json", nargs="+", required=True, help="MinerU JSON 檔案路徑")
     parser.add_argument("--company", required=True, help="公司名")
     parser.add_argument("--year", required=True, help="年份")
     parser.add_argument("--query", required=True, help="查詢主題")
@@ -622,7 +596,6 @@ def main():
                         help="選擇消融實驗模式")
     args = parser.parse_args()
 
-    # 當選擇 "all" 時，自動迴圈跑四個模式
     if args.ablation == "all":
         modes_to_run = ["full", "sparse_only", "dense_only", "hybrid_no_rule"]
     else:
@@ -634,7 +607,7 @@ def main():
         print("="*50)
 
         res = run_pipeline(
-            pdf_paths=args.pdf, company=args.company, year=args.year, query=args.query,
+            json_paths=args.json, company=args.company, year=args.year, query=args.query,
             topk=args.topk, export_all_chunks=not args.no_export, export_dir=args.export_dir,
             per_page_max=args.per_page_max, chunk_min_chars=args.chunk_min_chars,
             chunk_max_chars=args.chunk_max_chars, chunk_overlap_chars=args.chunk_overlap_chars,
