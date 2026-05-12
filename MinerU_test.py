@@ -3,8 +3,9 @@ r"""
 ESG / GRI 分析邏輯模組 (V12.0 - 支援 Ablation 消融實驗的 Hybrid 架構)
 - 結合 BM25 (Sparse) 與 Embedding (Dense) 雙路徑檢索
 - 實作 Reciprocal Rank Fusion (RRF) 分數融合
-- 支援消融實驗模式切換：full, sparse_only, dense_only, hybrid_no_rule, all (自動跑四次)
-- 【更新】使用 MinerU 的 JSON 輸出替代原本的 PDF OCR 解析
+- 【重要更新】修復 MinerU 複雜巢狀表格 (blocks) 解析遺漏問題
+- 【重要更新】增加純文字 search_text，避免 HTML 標籤干擾向量與 BM25
+- 【重要更新】過濾 BM25 單一數字雜訊，並擴增 Dense Query 語意
 """
 
 from __future__ import annotations
@@ -103,6 +104,7 @@ class Chunk:
     page: int
     text: str
     source: str
+    search_text: str = ""  # 【新增】不包含 HTML 的純文字版，專供演算法檢索使用
     match_type: str = "未知"
     relevance_score: float = 0.0
     score_meta: Dict[str, Any] = field(default_factory=dict)
@@ -166,7 +168,7 @@ def export_chunks_jsonl_csv(chunks: List[Chunk], company: str, year: str, query:
 
 
 # -----------------------------
-# 從 MinerU JSON 解析內容
+# 【更新】從 MinerU JSON 解析內容 (修復遺漏複雜表格問題)
 # -----------------------------
 def extract_from_mineru_json(json_path: str) -> List[Chunk]:
     with open(json_path, 'r', encoding='utf-8') as f:
@@ -175,27 +177,35 @@ def extract_from_mineru_json(json_path: str) -> List[Chunk]:
     doc_id = os.path.basename(json_path)
     pages: List[Chunk] = []
 
+    # 遞迴抓取 spans 內容，確保不管 MinerU 包了幾層 (blocks/lines) 都不會漏
+    def get_spans_text(element: dict) -> List[str]:
+        res = []
+        if 'spans' in element:
+            for span in element['spans']:
+                span_type = span.get('type')
+                if span_type in ['text', 'inline_equation', 'title']:
+                    res.append(span.get('content', ''))
+                elif span_type == 'table':
+                    res.append("\n" + span.get('html', '') + "\n")
+        if 'lines' in element:
+            for line in element['lines']:
+                res.extend(get_spans_text(line))
+        elif 'blocks' in element:
+            for block in element['blocks']:
+                res.extend(get_spans_text(block))
+        return res
+
     if 'pdf_info' in data:
         for page in data['pdf_info']:
             page_num = page.get('page_idx', 0) + 1
             page_text_blocks = []
 
-            for block in page.get('para_blocks', []):
-                block_text = ""
-                for line in block.get('lines', []):
-                    for span in line.get('spans', []):
-                        span_type = span.get('type')
-                        # 一般文字或公式
-                        if span_type in ['text', 'inline_equation', 'title']:
-                            block_text += span.get('content', '')
-                        # 表格則擷取 HTML
-                        elif span_type == 'table':
-                            block_text += "\n" + span.get('html', '') + "\n"
-                    block_text += "\n"  # 換行
-                page_text_blocks.append(block_text.strip())
+            for para_block in page.get('para_blocks', []):
+                block_content = "".join(get_spans_text(para_block))
+                if block_content.strip():
+                    page_text_blocks.append(block_content.strip())
 
-            # 將同一頁的區塊以換行連接
-            text = "\n\n".join([b for b in page_text_blocks if b])
+            text = "\n\n".join(page_text_blocks)
             if text.strip():
                 # 加上頁碼標記供切片器識別
                 text = f"[[p.{page_num}]]\n" + text
@@ -216,7 +226,6 @@ def is_heading(line: str) -> bool:
 def adaptive_chunk_v2(pages: List[Chunk], min_chars: int = 350, max_chars: int = 1200, overlap_chars: int = 180,
                       allow_over_max_ratio: float = 1.3) -> List[Chunk]:
     def is_table_like(line: str) -> bool:
-        # 支援 MinerU 的 HTML 表格標籤判斷
         line_lower = line.lower()
         if "<td" in line_lower or "<tr" in line_lower or "<table" in line_lower: return True
         if re.search(r"\d+\s+\d+\s+\d+", line): return True
@@ -291,7 +300,12 @@ def adaptive_chunk_v2(pages: List[Chunk], min_chars: int = 350, max_chars: int =
             if acc == 0: return
             text = "\n\n".join(buf).strip()
             if text:
-                out.append(Chunk(doc_id=pg.doc_id, page=pg.page, text=text, source=pg.source))
+                # 【新增】建立搜尋專用的純文字 (移除 HTML 標籤)，避免干擾
+                clean_search_text = re.sub(r'<[^>]+>', ' ', text)
+                clean_search_text = re.sub(r'\s+', ' ', clean_search_text).strip()
+
+                out.append(
+                    Chunk(doc_id=pg.doc_id, page=pg.page, text=text, source=pg.source, search_text=clean_search_text))
                 tail_for_overlap = text[-overlap_chars:] if overlap_chars > 0 else ""
             buf, acc = [], 0
 
@@ -402,9 +416,12 @@ class BM25:
         s = s.lower()
         s = re.sub(r"\[\[p\.[^\]]+\]\]", " ", s)
         if self.use_jieba:
-            return [t for t in jieba.lcut(s) if t.strip()]
+            tokens = [t for t in jieba.lcut(s) if t.strip()]
         else:
-            return re.findall(r"[a-z0-9]+|[\u4e00-\u9fff]", s)
+            tokens = re.findall(r"[a-z0-9]+|[\u4e00-\u9fff]", s)
+
+        # 【重要更新】濾除單個數字 (如 1, 2, 3)，避免假命中，但保留 305, 2050 等重要代碼
+        return [t for t in tokens if not (t.isdigit() and len(t) <= 1)]
 
     def _build(self):
         total_len = 0
@@ -442,7 +459,7 @@ class BM25:
 # RRF 融合演算法
 # -----------------------------
 def reciprocal_rank_fusion(bm25_hits: List[Tuple[int, float]], dense_hits: List[Tuple[int, float]], k: int = 60) -> \
-List[Tuple[int, float]]:
+        List[Tuple[int, float]]:
     rrf_scores = {}
     for rank, (idx, _) in enumerate(bm25_hits):
         rrf_scores[idx] = rrf_scores.get(idx, 0.0) + 1.0 / (k + rank + 1)
@@ -466,7 +483,6 @@ def run_pipeline(
     print(f"\n[INFO] 開始處理: {company} {year} | 查詢: {query} | 模式: {ablation_mode}")
 
     all_pages: List[Chunk] = []
-    # 這裡改從 JSON 讀取
     for p in json_paths:
         try:
             all_pages.extend(extract_from_mineru_json(p))
@@ -483,9 +499,10 @@ def run_pipeline(
     intents = expand_topic_or_gri(query)
     primary, aliases_strong = intents["primary"], intents.get("aliases_strong", [])
 
-    bm25 = BM25([c.text for c in chunks])
+    # 【更新】改用純文字版本餵給演算法，剔除 HTML
+    bm25 = BM25([c.search_text for c in chunks])
     embedder = get_embedding_model()
-    chunk_texts = [c.text for c in chunks]
+    chunk_texts = [c.search_text for c in chunks]
     chunk_embeddings = embedder.encode(chunk_texts, show_progress_bar=False)
 
     def contains_code(text: str, code: str) -> bool:
@@ -505,7 +522,7 @@ def run_pipeline(
         if query_is_gri or primary:
             direct_codes = primary if query_is_gri else primary
             for i, ch in enumerate(chunks):
-                if any(contains_code(ch.text, c) for c in direct_codes):
+                if any(contains_code(ch.search_text, c) for c in direct_codes):
                     ranked_results.append((i, 9999.0, "Stage 1: Entity Match"))
                     processed_indices.add(i)
 
@@ -514,7 +531,12 @@ def run_pipeline(
         bm25_hits = bm25.search(bm25_query, topk=fusion_pool_size)
 
     if ablation_mode in ["full", "dense_only", "hybrid_no_rule"]:
-        query_embedding = embedder.encode([query])
+        # 【更新】將同義詞一併塞給模型計算向量，讓模型明白「碳排」跟「TCFD」的關聯性
+        dense_query_str = query
+        if aliases_strong:
+            dense_query_str += " " + " ".join(aliases_strong[:10])
+
+        query_embedding = embedder.encode([dense_query_str])
         sims = cosine_similarity(query_embedding, chunk_embeddings)[0]
         dense_hits = [(i, float(s)) for i, s in enumerate(sims)]
         dense_hits.sort(key=lambda x: x[1], reverse=True)
@@ -577,7 +599,6 @@ def run_pipeline(
 # -----------------------------
 def main():
     parser = argparse.ArgumentParser()
-    # 【更新】改為傳入 JSON 路徑
     parser.add_argument("--json", nargs="+", required=True, help="MinerU JSON 檔案路徑")
     parser.add_argument("--company", required=True, help="公司名")
     parser.add_argument("--year", required=True, help="年份")
@@ -602,9 +623,9 @@ def main():
         modes_to_run = [args.ablation]
 
     for mode in modes_to_run:
-        print("\n" + "="*50)
+        print("\n" + "=" * 50)
         print(f" 開始執行實驗模式: 【 {mode} 】")
-        print("="*50)
+        print("=" * 50)
 
         res = run_pipeline(
             json_paths=args.json, company=args.company, year=args.year, query=args.query,
@@ -623,6 +644,7 @@ def main():
 
     if args.ablation == "all":
         print("\n 四個消融實驗模式均已執行完畢！檔案已存於 outputs/ 資料夾中。")
+
 
 if __name__ == "__main__":
     main()

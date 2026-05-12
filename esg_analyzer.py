@@ -64,34 +64,138 @@ def get_embedding_model():
 # -----------------------------
 TOPIC2GRI = {
     "資安": {
-        "primary": ["418-1"],
-        "related": ["GRI 2", "3-3"],
-        "aliases_strong": [
-            "ISMS", "ISO 27001", "ISO/IEC 27001", "ISO 27002", "ISO 27701", "NIST", "SOC 2", "GRI 418-1",
-            "SIEM", "DLP", "IAM", "MFA", "多因子驗證", "零信任", "Zero Trust",
-            "EDR", "XDR", "WAF", "IDS", "IPS",
-            "弱點掃描", "弱掃", "漏洞掃描", "漏洞管理", "弱點管理",
-            "滲透測試", "穿透測試", "Penetration Test", "紅隊演練", "Blue Team",
-            "加密", "Encryption", "金鑰管理", "KMS", "存取控制", "權限控管",
-            "資安事件", "資料外洩", "外洩事件", "事件通報", "通報機制", "事件應變",
-            "BCP", "DR", "災難復原", "異地備援", "備援", "營運持續",
-            "個資保護", "個人資料", "Personal Data", "隱私", "隱私權",
-            "社交工程", "釣魚郵件"
-        ],
-        "aliases_weak": [
-            "資安", "資訊安全", "資通安全", "網路安全", "Cybersecurity",
-            "資料安全", "資料保護", "資訊保護",
-            "資訊安全管理系統", "資訊安全管理", "資安政策", "資安治理", "資安管理", "CISO",
-            "資安風險", "風險評估",
-            "資安訓練", "資安教育", "資安教育訓練", "資安意識", "資安演練", "演練", "資安文化", "績效",
-            "第三方資安", "供應鏈資安", "委外資安", "雲端安全",
-            "SOC", "監控", "log", "日誌", "資安稽核", "資安查核", "稽核",
-            "通報"
-        ]
+    "primary": ["418-1"],
+    "related": ["3-3", "2-23", "2-24", "2-25", "2-26"],
+
+    "aliases_strong": [
+        # GRI / 國際資安與隱私管理準則
+        "GRI 418-1",
+        "ISMS",
+        "ISO 27001", "ISO/IEC 27001", "ISO/IEC 27001:2022",
+        "ISO 27002", "ISO/IEC 27002",
+        "ISO 27017", "ISO/IEC 27017",
+        "ISO 27018", "ISO/IEC 27018",
+        "ISO 27701", "ISO/IEC 27701",
+        "ISO 22301",
+        "NIST", "NIST CSF", "NIST CSF 2.0",
+        "SOC 2",
+        "PCI DSS",
+        "SWIFT CSP", "CSCF",
+        "IEC 62443", "ISA/IEC 62443",
+
+        # 資安防護架構 / 存取控制 / 身分管理
+        "SIEM", "SOAR",
+        "DLP",
+        "IAM", "PAM",
+        "Privileged Access Management",
+        "特權帳號管理", "特權存取管理",
+        "MFA", "多因子驗證",
+        "SSO", "Single Sign-On", "單一登入",
+        "RBAC", "Role-Based Access Control",
+        "最小權限原則", "Least Privilege",
+        "零信任", "Zero Trust",
+        "身分治理", "帳號生命週期管理",
+
+        # 端點 / 網路 / 雲端安全技術
+        "EDR", "XDR", "MDR", "NDR", "UEBA",
+        "WAF", "IDS", "IPS",
+        "CASB", "Cloud Access Security Broker",
+        "SASE", "Secure Access Service Edge",
+        "CSPM", "Cloud Security Posture Management",
+        "CWPP", "Cloud Workload Protection Platform",
+
+        # 弱點掃描 / 漏洞治理 / 攻防演練
+        "弱點掃描", "弱掃", "漏洞掃描",
+        "漏洞管理", "弱點管理",
+        "CVE", "CVSS", "CVSS v4.0",
+        "漏洞評分", "弱點評級",
+        "漏洞修補", "資安修補", "修補管理", "Patch Management",
+        "滲透測試", "穿透測試", "Penetration Test",
+        "紅隊演練", "Blue Team",
+        "MITRE ATT&CK", "ATT&CK",
+        "OWASP Top 10", "OWASP",
+
+        # 加密 / 資料保護 / 隱私安全
+        "加密", "Encryption",
+        "金鑰管理", "KMS",
+        "存取控制", "權限控管",
+        "資料分類分級", "資料遮罩",
+        "Tokenization", "Masking",
+        "PII", "Personally Identifiable Information",
+        "個資保護", "個人資料", "Personal Data",
+        "隱私", "隱私權",
+
+        # 資安事件 / 威脅偵測 / 攻擊型態
+        "資安事件", "資料外洩", "外洩事件",
+        "事件通報", "通報機制", "事件應變",
+        "資安監控中心", "安全營運中心", "SOC 24/7",
+        "威脅情資", "Cyber Threat Intelligence", "CTI",
+        "威脅獵捕", "Threat Hunting",
+        "異常行為偵測", "資安告警",
+        "勒索軟體", "Ransomware",
+        "惡意程式", "Malware",
+        "APT", "進階持續性威脅",
+        "DDoS", "阻斷服務攻擊",
+        "社交工程", "釣魚郵件",
+
+        # 營運持續 / 備援 / 災難復原
+        "BCP", "DR",
+        "災難復原", "異地備援", "備援", "營運持續",
+        "災難復原演練", "營運持續演練",
+
+        # 供應鏈與第三方資安
+        "第三方風險管理", "Third-Party Risk Management", "TPRM",
+        "供應商資安稽核", "供應商資安評估",
+        "SBOM", "Software Bill of Materials", "軟體物料清單",
+        "軟體供應鏈安全",
+        "開源套件風險", "Open Source Risk",
+
+        # 半導體 / 傳產常見 OT、工控與製造資安
+        "OT", "OT Security", "工控資安",
+        "ICS", "ICS Security", "工業控制系統",
+        "IACS", "Industrial Automation and Control Systems",
+        "SCADA", "SCADA Security",
+        "PLC", "可程式邏輯控制器",
+        "MES", "Manufacturing Execution System",
+        "廠務系統資安", "製程設備資安",
+        "生產系統資安", "產線資安",
+        "IT/OT 整合", "IT/OT convergence",
+        "關鍵基礎設施", "Critical Infrastructure",
+
+        # 金融業常見交易與資料安全
+        "支付安全", "交易安全",
+        "金融資料保護", "客戶資料保護",
+        "詐欺偵測", "Fraud Detection"
+    ],
+
+    "aliases_weak": [
+        "資安", "資訊安全", "資通安全", "網路安全", "Cybersecurity",
+        "資料安全", "資料保護", "資訊保護",
+        "資訊安全管理系統", "資訊安全管理",
+        "資安政策", "資安治理", "資安管理", "CISO",
+        "資安風險", "風險評估",
+
+        "資安訓練", "資安教育", "資安教育訓練",
+        "資安意識", "資安演練", "演練", "資安文化", "績效",
+
+        "第三方資安", "供應鏈資安", "委外資安", "雲端安全",
+        "委外服務風險", "外包服務資安",
+
+        "SOC", "監控", "log", "日誌",
+        "資安稽核", "資安查核", "稽核",
+        "通報",
+
+        "雲端存取安全", "雲端態勢管理",
+        "資安情資分享",
+
+        "關鍵系統保護", "系統韌性",
+        "生產系統不中斷",
+        "企業營運韌性"
+    ]
     },
 
     "碳排": {
-        "primary": ["305-1", "305-2", "305-3", "305-4", "305-5", "302-1", "302-3", "302-4"],
+        "primary": ["305-1", "305-2", "305-3", "305-4", "305-5", "302-1", "302-2","302-3", "302-4"],
         "related": ["3-3"],
         "aliases_strong": [
             "tCO2e", "CO2e", "CO2", "GHG", "溫室氣體",
@@ -99,7 +203,7 @@ TOPIC2GRI = {
             "直接排放", "間接排放",
             "GHG Protocol", "溫室氣體盤查議定書", "ISO 14064", "ISO 14067", "IPCC", "CDP", "TCFD",
             "SBTi", "SBT", "RE100", "淨零", "Net Zero", "碳中和", "Carbon Neutral", "淨零 2050",
-            "ISO 50001", "GRI302",
+            "ISO 50001", "GRI302","GRI305"
             "CCUS", "碳捕捉", "碳封存", "碳移除"
         ],
         "aliases_weak": [

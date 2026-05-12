@@ -86,18 +86,115 @@ TOPIC2GRI = {
         "aliases_weak": []
     },
     "水資源": {
-        "primary": ["303-1", "303-2", "303-3", "303-4", "303-5"],
-        "related": ["3-3"],
-        "aliases_strong": [
-            "超純水", "UPW", "超純水 UPW", "製程用水",
-            "取水量", "取水來源", "取水許可",
-            "地下水", "地表水", "自來水", "地下水/地表水/自來水",
-            "回收水", "再生水", "中水回用", "水回收率", "回用率",
-            "放流水", "放流標準", "排放水質",
-            "WRI Aqueduct", "Water Stress", "水壓力"
-        ],
-        "aliases_weak": []
-    },
+    "primary": ["303-1", "303-2", "303-3", "303-4", "303-5"],
+    "related": ["3-3"],
+
+    "aliases_strong": [
+        # GRI / 水資源準則
+        "GRI 303", "GRI303",
+        "GRI 303-1", "GRI 303-2", "GRI 303-3", "GRI 303-4", "GRI 303-5",
+        "303-1", "303-2", "303-3", "303-4", "303-5",
+        "水與放流水", "Water and Effluents",
+
+        # 國際框架 / 評估工具
+        "CDP Water Security", "CDP Water", "Water Security",
+        "WRI Aqueduct", "Aqueduct Water Risk Atlas", "Aqueduct",
+        "WWF Water Risk Filter", "Water Risk Filter",
+        "TNFD", "自然相關財務揭露", "自然資本", "自然資本風險",
+        "自然相關風險", "Nature-related risk", "Nature-related",
+        "SASB", "ISO 14001", "ISO 46001",
+
+        # 水資源風險 / 水壓力
+        "Water Stress", "water stress", "水壓力", "水資源壓力",
+        "高水壓力地區", "水壓力地區", "water-stressed area",
+        "water stress exposure", "高水壓力地區曝險",
+        "缺水風險", "水資源風險", "水風險", "Water Risk",
+        "水匱乏", "Water Scarcity", "water scarcity",
+        "乾旱", "枯水期", "限水", "供水中斷",
+        "洪水", "淹水", "暴雨", "極端降雨",
+        "實體風險", "Physical Risk", "氣候實體風險",
+        "洪災風險", "乾旱風險",
+
+        # 取水 / 用水 / 耗水
+        "取水量", "總取水量", "取水來源", "取水許可",
+        "用水量", "總用水量", "耗水量", "水耗用量",
+        "Water Withdrawal", "water withdrawal",
+        "Water Consumption", "water consumption",
+        "Water Use", "water use",
+        "Freshwater", "淡水",
+        "Other Water", "其他水",
+        "第三方水", "Third-party water",
+        "地表水", "Surface Water",
+        "地下水", "Groundwater",
+        "海水", "Seawater",
+        "自來水", "市政供水", "Municipal Water",
+
+        # 排水 / 放流水 / 廢水 / 水質
+        "排水量", "排放水量", "放流水",
+        "廢水", "污水", "製程廢水", "工業廢水",
+        "Water Discharge", "water discharge",
+        "Effluent", "effluents",
+        "廢水處理", "污水處理",
+        "廢水處理廠", "污水處理廠",
+        "廢水處理設施",
+        "放流水標準", "排放水質",
+        "水質檢測", "水質監測",
+        "放流口", "排放口",
+        "水污染防治", "水污染防治措施",
+        "排放許可", "許可排放量",
+        "COD", "BOD", "SS", "TSS", "pH",
+        "氨氮", "總氮", "總磷", "重金屬",
+        "化學需氧量", "生化需氧量",
+
+        # 回收 / 再利用 / 循環水
+        "回收水", "再生水", "循環水",
+        "水回收", "水回收率",
+        "回用率", "水再利用率",
+        "中水回用", "製程回收水",
+        "雨水回收", "再生水使用量",
+        "再生水導入",
+        "Water Recycling", "Water Reuse",
+        "Reclaimed Water", "Recycled Water",
+        "Reuse Rate", "Recycling Rate",
+
+        # 水效率 / 水密集度
+        "用水效率", "水效率", "water efficiency",
+        "水密集度", "用水密集度", "water intensity",
+        "單位產品用水量", "單位營收用水量",
+        "每單位產量用水",
+        "每片晶圓用水量", "單位晶圓用水",
+        "per wafer water use", "water use intensity",
+
+        # 半導體製程相關
+        "超純水", "UPW", "超純水 UPW",
+        "Ultra Pure Water", "Ultrapure Water",
+        "製程用水", "清洗用水", "晶圓清洗",
+        "純水系統", "DI Water", "去離子水",
+        "逆滲透", "RO", "Reverse Osmosis",
+        "RO濃排水", "濃排水回收",
+        "冷卻水塔", "Cooling Tower",
+        "洗滌塔", "Scrubber",
+        "冷凝水回收",
+        "廢水回收系統", "水回收系統",
+        "回收至製程",
+        "科學園區供水", "供水穩定",
+
+        # 傳統產業製程相關
+        "工業用水", "冷卻用水",
+        "循環冷卻水", "鍋爐用水", "洗滌用水",
+
+        # 金融業 / 服務業營運與投融資相關
+        "營運據點用水", "辦公室用水", "分行用水",
+        "大樓用水", "節水設備", "省水設備",
+        "綠建築", "LEED", "EEWH",
+        "投融資水風險", "授信水風險",
+        "投資組合水風險", "portfolio water risk",
+        "水資源投融資風險",
+        "水資源敏感產業", "高耗水產業",
+        "淡水生態系", "freshwater ecosystem",
+        "生物多樣性", "biodiversity"
+    ]
+}
 }
 
 
